@@ -1,0 +1,83 @@
+---
+- hosts: all
+  become: true
+  gather_facts: False
+
+  pre_tasks:
+  # Ansible will fail to run if you don't do this on fresh machines.
+  - name: Install Python for Ansible
+    raw: test -e /usr/bin/python || (apt -y update && apt install -y python-minimal)
+    changed_when: False
+  - setup: # Run Gather_Facts.
+      
+
+  tasks:
+  # Get the machine into a good state.
+  - name: Updating Machine
+    apt:
+      update_cache: yes
+      upgrade: yes
+
+  - name: Installing Standard tools
+    apt:
+      name: mosh,python-pip,apt-transport-https,ca-certificates,curl,software-properties-common,zip
+
+  - name: Installing pyOpensSSL and Docker-py
+    pip:
+      name: pyOpenSSL,docker-py
+
+  - name: Running local-gen
+    shell: locale-gen en_GB.UTF-8
+
+  # Install Docker
+  - name: Adding Dockers GPG Key (NOT VERIFIED)
+    raw:
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+
+  - name: Adding Dockers Repository
+    raw:
+      sudo add-apt-repository \
+        "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+
+  - name: Updating Cache
+    apt:
+      update_cache: yes
+
+  - name: Installing Docker Community Edition
+    apt:
+      name: docker-ce
+
+  # Installing nomad
+  - name: Fetching the Nomad 0.8.6
+    get_url:
+      url: https://releases.hashicorp.com/nomad/0.8.6/nomad_0.8.6_linux_amd64.zip
+      dest: /tmp/nomad.zip
+
+  - name: Unziping nomad
+    unarchive:
+      src: /tmp/nomad.zip
+      dest: /usr/bin/
+      remote_src: yes
+
+  - name: Adding /etc/nomad/
+    file:
+      path: /etc/nomad/
+      state: directory
+
+  - name: Copying configurations for Nomad
+    copy:
+      src: ../configs/nomad/server.conf
+      dest: /etc/nomad/server.conf
+      mode: 0600
+
+  - name: Adding a system service for Nomad
+    copy:
+      src: ../configs/nomad/nomad.service
+      dest: /lib/systemd/system/nomad.service
+      mode: 0700
+
+  - name: Start Nomad
+    service:
+      name: nomad
+      state: started
+      enabled: true
